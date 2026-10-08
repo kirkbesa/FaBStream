@@ -1,0 +1,55 @@
+/* Flesh and Blood broadcast palette — shared across all overlays, and linked by
+   the commentator and table pages. The control panel mirrors these values in
+   control/src/styles.css (it's a separate Vite build).
+
+   Taken from Flesh and Blood's own look: blood red on warm near-black (the
+   logo and card backs), bone-white for text and highlights, and aged brass as
+   the metal accent. Brass is the default single-colour accent (labels,
+   highlights, the signature stripes); blood red is the second colour.
+
+   The three PITCH colours (red / yellow / blue) are the game's, not the
+   brand's — they live in overlays/fab.js and colour cards by pitch. */
+:root {
+  /* Brass — aged gold, from deep to bone */
+  --brand-brass-deep:  #6e5430;
+  --brand-brass:       #b8935a;
+  --brand-bone:        #e9dfcf;
+  --brand-brass-dim:   rgba(184, 147, 90, 0.75);
+  --brand-brass-soft:  rgba(184, 147, 90, 0.45);
+  --brand-brass-faint: rgba(184, 147, 90, 0.12);
+
+  /* Blood — the logo red, deep to bright */
+  --brand-blood-deep:  #5c0b0f;
+  --brand-blood:       #a3161d;
+  --brand-blood-light: #d8443f;
+  --brand-blood-dim:   rgba(163, 22, 29, 0.75);
+  --brand-blood-faint: rgba(163, 22, 29, 0.14);
+
+  /* Grounds — warm near-black, never pure black */
+  --brand-ink:         #0b0908;
+  --brand-dark:        #16110f;
+  --brand-panel:       rgba(14, 10, 9, 0.9);    /* overlay panels over video */
+
+  /* Player sides */
+  --brand-p1: var(--brand-blood-light);
+  --brand-p2: var(--brand-brass);
+
+  /* The signature stripe: brass that brightens to bone at its centre, like
+     the gilt edge on a card frame. */
+  --brand-gradient: linear-gradient(
+    90deg,
+    var(--brand-brass-deep) 0%,
+    var(--brand-brass) 28%,
+    var(--brand-bone) 50%,
+    var(--brand-brass) 72%,
+    var(--brand-brass-deep) 100%
+  );
+
+  /* Blood counterpart, deep → logo red → bright. */
+  --brand-gradient-blood: linear-gradient(
+    90deg,
+    var(--brand-blood-deep) 0%,
+    var(--brand-blood) 55%,
+    var(--brand-blood-light) 100%
+  );
+}

@@ -1,0 +1,37 @@
+[
+  {
+    "name": "Kestrel",
+    "deck": "Dorinthea",
+    "decklist": "Hero / Weapon / Equipment\n1x Dorinthea Ironsong\n1x Dawnblade\n1x Braveforge Bracers\n1x Fyendal's Spring Tunic\n1x Nullrune Boots\nPitch 1\n3x Driving Blade (red)\n3x Warrior's Valor (red)\n3x Sink Below (red)\n3x Sigil of Solace (red)\nPitch 2\n3x Rally the Rearguard (yel)\nPitch 3\n3x Steelblade Shunt (blu)"
+  },
+  {
+    "name": "Marlowe",
+    "deck": "Bravo",
+    "decklist": [
+      { "count": 1, "name": "Bravo, Showstopper" },
+      { "count": 1, "name": "Anothos" },
+      { "count": 1, "name": "Tectonic Plating" },
+      { "count": 1, "name": "Helm of Isen's Peak" },
+      { "count": 3, "name": "Crippling Crush (red)" },
+      { "count": 3, "name": "Unmovable (red)" },
+      { "count": 3, "name": "Show Time! (blue)" },
+      { "count": 3, "name": "Sloggism (blue)" }
+    ]
+  },
+  {
+    "name": "Tamsin",
+    "deck": "Rhinar",
+    "decklist": [
+      "1x Rhinar, Reckless Rampage",
+      "1x Romping Club",
+      "1x Scabskin Leathers",
+      "1x Barkbone Strapping",
+      "3x Pack Hunt (red)",
+      "3x Bloodrush Bellow (yellow)",
+      "3x Wild Ride (blue)"
+    ],
+    "sideboard": [
+      "2x Pummel (red)"
+    ]
+  }
+]

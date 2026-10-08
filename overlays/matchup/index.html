@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Matchup Overlay</title>
+  <link rel="stylesheet" href="/overlays/theme.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: transparent;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      color: #fff;
+    }
+
+    /* The whole overlay fades as one unit when matchupVisible flips. */
+    #frame {
+      position: absolute; inset: 0;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+    #frame.visible { opacity: 1; }
+
+    /* ── Layout ─────────────────────────────────────────────────────
+       Two straight rails over a clear centre for the overhead table feed:
+
+         LEFT  (300px) — round timer, match score (best-of-three only), and
+                         the featured card, all centred in the rail.
+         RIGHT (400px) — mirrored top-to-bottom to match the table: player 1
+                         sits at the top of the overhead shot, player 2 at the
+                         bottom. So it reads
+                           P1 name · P1 cam · P1 hero
+                           life P1 ─── life P2
+                           P2 hero · P2 cam · P2 name                     */
+    .rail {
+      position: absolute;
+      top: 0; bottom: 0;
+      display: flex;
+      flex-direction: column;
+      background: linear-gradient(180deg, rgba(14,10,9,0.94) 0%, rgba(14,10,9,0.78) 100%);
+    }
+    .rail.left  { left: 0;  width: 300px; border-right: 3px solid transparent; border-image: var(--brand-gradient) 1; }
+    .rail.right { right: 0; width: 400px; border-left:  3px solid transparent; border-image: var(--brand-gradient) 1; }
+
+    /* ── Left rail: timer · score · featured card, centred ────────── */
+    .rail.left {
+      align-items: center;
+      justify-content: center;
+      gap: 22px;
+      padding: 24px 20px;
+      text-align: center;
+    }
+    .timer-label {
+      font-size: 11px; font-weight: 800; letter-spacing: 3px; text-transform: uppercase;
+      color: var(--brand-brass-dim);
+      margin-bottom: 2px;
+    }
+    .timer-digits {
+      font-size: 64px; font-weight: 800; line-height: 1;
+      font-variant-numeric: tabular-nums; letter-spacing: -1px;
+      text-shadow: 0 2px 12px rgba(0,0,0,0.6);
+      transition: color 0.3s ease;
+    }
+    .timer-digits.warning  { color: #f97316; }
+    .timer-digits.critical { color: #ef4444; }
+    .timer-digits.turns    { font-size: 44px; letter-spacing: 2px; color: #ef4444; }
+
+    /* Best-of-three only — FaB matches are a single game by default. */
+    .match-score {
+      display: none;
+      align-items: center; gap: 14px;
+      font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums;
+    }
+    .match-score.visible { display: flex; }
+    .match-score .dash { color: rgba(255,255,255,0.35); font-weight: 400; }
+    .match-score .p1   { color: var(--p1, var(--brand-p1)); }
+    .match-score .p2   { color: var(--p2, var(--brand-p2)); }
+    .match-score-label {
+      display: none;
+      font-size: 10px; font-weight: 800; letter-spacing: 2.5px; text-transform: uppercase;
+      color: rgba(255,255,255,0.4); margin-top: -16px;
+    }
+    .match-score.visible + .match-score-label { display: block; }
+
+    /* The featured card — one shared slot, set from the panel or the
+       commentator page. Hidden when nothing is featured. */
+    .featured {
+      width: 100%;
+      display: flex; justify-content: center;
+    }
+    .featured img {
+      width: 260px; max-width: 100%;
+      border-radius: 12px;
+      box-shadow: 0 10px 34px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.08);
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+    .featured img.visible { opacity: 1; transform: none; }
+
+    /* ── Right rail ─────────────────────────────────────────────── */
+    .rail.right {
+      align-items: stretch;
+      gap: 10px;
+      padding: 14px 16px;
+    }
+
+    .player-name {
+      font-size: 22px; font-weight: 800; letter-spacing: 0.5px;
+      text-transform: uppercase; text-align: center; line-height: 1.15;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+      flex-shrink: 0;
+    }
+    .player-meta {
+      font-size: 11px; color: rgba(255,255,255,0.5); text-align: center;
+      margin-top: -8px; flex-shrink: 0;
+    }
+    .player-meta:empty { display: none; }
+
+    /* Cam cut-outs — the interior stays transparent so an OBS video source
+       placed behind this overlay shows through. --cam-ratio is 2:1 rather than
+       16:9 to leave the hero cards room; crop the cams to match in OBS. */
+    .video-slot {
+      --cam-ratio: 2 / 1;
+      position: relative;
+      width: 100%;
+      aspect-ratio: var(--cam-ratio);
+      flex-shrink: 0;
+      border-radius: 10px;
+      border: 2px solid rgba(255,255,255,0.12);
+      box-shadow: inset 0 0 0 2px rgba(0,0,0,0.35);
+    }
+    .video-slot::after {
+      content: attr(data-label);
+      position: absolute; left: 8px; bottom: 6px;
+      font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+      color: rgba(255,255,255,0.28);
+    }
+    /* Player cams switched off: the slots go and the hero cards grow. */
+    #frame.no-cams .video-slot { display: none; }
+
+    /* The full hero card, as large as the space allows — never cropped or
+       stretched. Each hero takes an equal share of what the rail has left. */
+    .hero {
+      flex: 1;
+      min-height: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .hero img {
+      max-width: 100%; max-height: 100%;
+      border-radius: 12px;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.65), 0 0 0 2px var(--side);
+      display: none;
+    }
+    .hero img.visible { display: block; }
+    .hero .hero-empty {
+      width: 60%; height: 100%;
+      border-radius: 12px; border: 2px dashed rgba(255,255,255,0.14);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+      color: rgba(255,255,255,0.3);
+    }
+    .hero img.visible + .hero-empty { display: none; }
+
+    /* Both life totals, between the heroes: P1 over a rule over P2. */
+    .life {
+      flex-shrink: 0;
+      display: flex; flex-direction: column; align-items: center;
+      gap: 4px;
+    }
+    .life-num {
+      font-size: 58px; font-weight: 900; line-height: 1;
+      font-variant-numeric: tabular-nums; letter-spacing: -1px;
+      text-shadow: 0 2px 12px rgba(0,0,0,0.6);
+      transition: color 0.25s ease, transform 0.15s ease;
+    }
+    .life-num.p1 { color: var(--p1, var(--brand-p1)); }
+    .life-num.p2 { color: var(--p2, var(--brand-p2)); }
+    .life-num.dead { color: rgba(255,255,255,0.35); text-decoration: line-through; text-decoration-thickness: 4px; }
+    .life-num.bump { transform: scale(1.12); }
+    .life-rule {
+      width: 70%; height: 2px;
+      background: var(--brand-gradient);
+      opacity: 0.8;
+    }
+
+    /* Per-side accents. */
+    .side-p1 { --side: var(--p1, var(--brand-p1)); }
+    .side-p2 { --side: var(--p2, var(--brand-p2)); }
+  </style>
+</head>
+<body>
+  <div id="frame">
+
+    <!-- Left rail: timer · Bo3 score · featured card -->
+    <div class="rail left">
+      <div>
+        <div class="timer-label" id="timer-label">Round</div>
+        <div class="timer-digits" id="timer-digits">50:00</div>
+      </div>
+      <div class="match-score" id="match-score">
+        <span class="p1" id="score-p1">0</span><span class="dash">–</span><span class="p2" id="score-p2">0</span>
+      </div>
+      <div class="match-score-label">Games</div>
+      <div class="featured">
+        <img id="featured" alt="" />
+      </div>
+    </div>
+
+    <!-- Right rail: mirrored, player 1 at the top -->
+    <div class="rail right">
+      <div class="player-name" id="p1-name">Player 1</div>
+      <div class="player-meta" id="p1-meta"></div>
+      <div class="video-slot" data-label="P1 Cam"></div>
+      <div class="hero side-p1">
+        <img id="p1-hero" alt="" />
+        <div class="hero-empty">Hero</div>
+      </div>
+
+      <div class="life">
+        <div class="life-num p1" id="p1-life">40</div>
+        <div class="life-rule"></div>
+        <div class="life-num p2" id="p2-life">40</div>
+      </div>
+
+      <div class="hero side-p2">
+        <img id="p2-hero" alt="" />
+        <div class="hero-empty">Hero</div>
+      </div>
+      <div class="video-slot" data-label="P2 Cam"></div>
+      <div class="player-meta" id="p2-meta"></div>
+      <div class="player-name" id="p2-name">Player 2</div>
+    </div>
+  </div>
+
+  <script src="/overlays/ws.js"></script>
+  <script>
+    const frame = document.getElementById('frame')
+    const $ = (id) => document.getElementById(id)
+
+    function getActive(state) {
+      return state.matches?.[state.activeMatchIndex ?? 0] ?? null
+    }
+
+    // ── Players ────────────────────────────────────────────────────
+    const lastLife = { p1: null, p2: null }
+
+    function setPlayer(prefix, p) {
+      $(`${prefix}-name`).textContent = (p.name || (prefix === 'p1' ? 'Player 1' : 'Player 2'))
+
+      const meta = []
+      if (p.handle)   meta.push(p.handle.startsWith('@') ? p.handle : '@' + p.handle)
+      if (p.pronouns) meta.push(p.pronouns)
+      $(`${prefix}-meta`).textContent = meta.join(' · ')
+
+      // The full hero card. Only reassign src when the hero actually changes,
+      // so a life tap doesn't make the card flicker.
+      const img = $(`${prefix}-hero`)
+      const src = p.hero?.imageUrl ?? ''
+      if (img.dataset.src !== src) {
+        img.dataset.src = src
+        img.classList.remove('visible')
+        if (src) {
+          img.onload = () => img.classList.add('visible')
+          img.src = src
+        } else {
+          img.removeAttribute('src')
+        }
+      }
+
+      const life = p.life ?? p.hero?.life ?? 40
+      const el = $(`${prefix}-life`)
+      el.textContent = life
+      el.classList.toggle('dead', life <= 0)
+      if (lastLife[prefix] !== null && lastLife[prefix] !== life) {
+        el.classList.remove('bump')
+        requestAnimationFrame(() => {
+          el.classList.add('bump')
+          setTimeout(() => el.classList.remove('bump'), 150)
+        })
+      }
+      lastLife[prefix] = life
+    }
+
+    // ── Featured card ──────────────────────────────────────────────
+    // overlay.cardZoom holds a card id; its image is served at /cards/<id>.
+    function setFeatured(id) {
+      const img = $('featured')
+      if (img.dataset.id === (id ?? '')) return
+      img.dataset.id = id ?? ''
+      img.classList.remove('visible')
+      if (!id) { img.removeAttribute('src'); return }
+      img.onload = () => img.classList.add('visible')
+      img.src = `/cards/${id}`
+    }
+
+    // ── Round timer ────────────────────────────────────────────────
+    // Same behaviour as the standalone timer overlay: Swiss counts down and
+    // shows TURNS at time; top cut counts up.
+    let timer = null, format = 'swiss', tickId = null
+    const pad2 = (n) => String(Math.floor(Math.abs(n))).padStart(2, '0')
+
+    function renderTimer() {
+      const digits = $('timer-digits'), label = $('timer-label')
+      if (!timer) return
+      const live = (timer.running && timer.startedAt) ? (Date.now() - timer.startedAt) / 1000 : 0
+      if (format === 'swiss') {
+        const left = Math.ceil(timer.duration - timer.accumulated - live)
+        if (left <= 0) {
+          digits.textContent = 'TURNS'
+          digits.className = 'timer-digits turns'
+          label.textContent = 'Time'
+        } else {
+          digits.textContent = `${pad2(left / 60)}:${pad2(left % 60)}`
+          digits.className = 'timer-digits' + (left <= 60 ? ' critical' : left <= 180 ? ' warning' : '')
+          label.textContent = 'Round'
+        }
+      } else {
+        const s = Math.floor(timer.accumulated + live)
+        const h = Math.floor(s / 3600)
+        digits.textContent = h > 0
+          ? `${pad2(h)}:${pad2((s % 3600) / 60)}:${pad2(s % 60)}`
+          : `${pad2(s / 60)}:${pad2(s % 60)}`
+        digits.className = 'timer-digits'
+        label.textContent = 'Match'
+      }
+    }
+
+    function render(state) {
+      const active = getActive(state)
+      if (!active) return
+      const overlay = state.overlay ?? {}
+
+      frame.classList.toggle('visible', overlay.matchupVisible !== false)
+      frame.classList.toggle('no-cams', overlay.playerCamsVisible === false)
+      if (overlay.matchupVisible === false) return
+
+      const [p1, p2] = active.players
+      setPlayer('p1', p1)
+      setPlayer('p2', p2)
+      setFeatured(overlay.cardZoom ?? null)
+
+      // Match score under the timer, best-of-three only.
+      const bo3 = active.match?.bestOf === 3
+      $('match-score').classList.toggle('visible', bo3)
+      $('score-p1').textContent = p1.gameScore ?? 0
+      $('score-p2').textContent = p2.gameScore ?? 0
+
+      timer = active.timer ?? null
+      format = active.match?.format ?? 'swiss'
+      renderTimer()
+      if (timer?.running && tickId === null) tickId = setInterval(renderTimer, 250)
+      if (!timer?.running && tickId !== null) { clearInterval(tickId); tickId = null }
+    }
+
+    connectOverlay(msg => { if (msg.type === 'state') render(msg.data) })
+  </script>
+</body>
+</html>
